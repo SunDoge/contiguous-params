@@ -30,6 +30,9 @@ class SingleContiguousParams:
     def contiguous(self) -> List[Tensor]:
         return [self._param_buffer]
 
+    def parameters(self) -> Iterable[Parameter]:
+        return iter(self.contiguous())
+
     def original(self) -> List[Parameter]:
         return self._params
 
@@ -116,6 +119,9 @@ class MultiContiguousParams(SingleContiguousParams):
 
     def buffer_is_valid(self) -> bool:
         return all(cp.buffer_is_valid() for cp in self._contiguous_params)
+
+    def parameters(self) -> Iterable[Parameter]:
+        return iter(cp._param_buffer for cp in self._contiguous_params)
 
 
 class ContiguousParams(MultiContiguousParams):
