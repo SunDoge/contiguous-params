@@ -120,3 +120,37 @@ def test_distributed_data_parallel():
 
     for p1, p2 in zip(model_ref.parameters(), model_c.parameters()):
         assert torch.allclose(p1.data, p2.data, atol=1e-06)
+
+
+@pytest.mark.parametrize('device', ['cpu', 'cuda'])
+def test_multi_contiguous_params(device: str):
+    if device == 'cuda' and not torch.cuda.is_available():
+        print("No GPU available, skipping GPU test.")
+        return
+
+    """Verify that the parameters are the same after a few updates."""
+    x = torch.randn(1, 8).to(device)
+
+    model_ref = nn.Sequential(*[nn.Linear(8, 8) for i in range(10)])
+    model_ref = model_ref.to(device)
+    optimizer = torch.optim.SGD(model_ref.parameters(), lr=1e-3)
+
+    model_c: nn.Module = copy.deepcopy(model_ref)
+    parameters_c = ContiguousParams([
+        {'params': model_c[:5].parameters(), 'lr': 1e-3},
+        {'params': model_c[5:].parameters(), 'lr': 1e-3}
+    ])
+    optimizer_c = torch.optim.SGD(parameters_c.contiguous())
+
+    for model, optimizer in zip([model_ref, model_c], [optimizer, optimizer_c]):
+        for step in range(5):
+            loss: Tensor = model(x).sum()
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+    # Verify that the model/optimizer did not modify the data or grad handle.
+    parameters_c.assert_buffer_is_valid()
+
+    # Verify that both models applied the same parameter updates.
+    for p1, p2 in zip(model_ref.parameters(), model_c.parameters()):
+        assert torch.allclose(p1.data, p2.data, atol=1e-06)
