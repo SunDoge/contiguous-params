@@ -1,9 +1,8 @@
-from typing import Callable, Dict, Iterable, List, Tuple
-import torch
-from torch import nn, Tensor
-from torch.nn.parameter import Parameter
+from typing import Iterable, List, Tuple, Union
 
-nn.Module.parameters()
+import torch
+from torch import Tensor
+from torch.nn import Parameter
 
 
 class SingleContiguousParams:
@@ -34,7 +33,7 @@ class SingleContiguousParams:
     def original(self) -> List[Parameter]:
         return self._params
 
-    def validate_buffer(self) -> bool:
+    def buffer_is_valid(self) -> bool:
         params_and_pointers = zip(
             self._params,
             self._data_pointers,
@@ -48,7 +47,7 @@ class SingleContiguousParams:
         )
 
     def assert_buffer_is_valid(self):
-        if not self.validate_buffer():
+        if not self.buffer_is_valid():
             raise ValueError(
                 "The data or gradient buffer has been invalidated. Please make "
                 "sure to use inplace operations only when updating parameters "
@@ -115,5 +114,18 @@ class MultiContiguousParams(SingleContiguousParams):
     def original(self) -> List[dict]:
         return [{'params': cp.original(), **p} for cp, p in zip(self._contiguous_params, self._params)]
 
-    def validate_buffer(self) -> bool:
-        return all(cp.validate_buffer() for cp in self._contiguous_params)
+    def buffer_is_valid(self) -> bool:
+        return all(cp.buffer_is_valid() for cp in self._contiguous_params)
+
+
+class ContiguousParams(MultiContiguousParams):
+
+    def __init__(
+        self,
+        params: Union[Iterable[Parameter], List[dict]]
+    ) -> None:
+        params = list(params)
+        if not isinstance(params[0], dict):
+            params = [{'params': params}]
+
+        super().__init__(params)
